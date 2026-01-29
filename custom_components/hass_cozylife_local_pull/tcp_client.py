@@ -119,12 +119,22 @@ class tcp_client(object):
         get info for device model
         :return:
         """
-        self._only_send(CMD_INFO, {})
         try:
+            if self._connect is None:
+                _LOGGER.warning('Connection is None in _device_info')
+                return None
+
+            # Send CMD_INFO
+            self._connect.send(self._get_package(CMD_INFO, {}))
+
+            # Receive response
             resp = self._connect.recv(1024)
-            resp_json = json.loads(resp.strip())            
-        except:
-            _LOGGER.info('_device_info.recv.error')
+            resp_json = json.loads(resp.strip())
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _LOGGER.warning(f'Connection error in _device_info: {e}')
+            return None
+        except Exception as e:
+            _LOGGER.info(f'_device_info error: {e}')
             return None
         
         if resp_json.get('msg') is None or type(resp_json['msg']) is not dict:
@@ -233,8 +243,13 @@ class tcp_client(object):
         :param payload:
         :return:
         """
-        self._connect.send(self._get_package(cmd, payload))
         try:
+            if self._connect is None:
+                _LOGGER.warning('Connection is None, cannot send')
+                return {}
+
+            self._connect.send(self._get_package(cmd, payload))
+
             i = 10
             while i > 0:
                 res = self._connect.recv(1024)
@@ -256,9 +271,13 @@ class tcp_client(object):
 
             return {}
 
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _LOGGER.warning(f'Connection error during send/recv: {e}')
+            self._close_connection()
+            self._reconnect()
+            return {}
         except Exception as e:
-            _LOGGER.info(f'_only_send.recv.error: {e}')
-            self._reconnect()  # Reconnect on exception
+            _LOGGER.error(f'Unexpected error in _send_receiver: {e}')
             return {}
     
     def _only_send(self, cmd: int, payload: dict) -> None:
@@ -268,7 +287,18 @@ class tcp_client(object):
         :param payload:
         :return:
         """
-        self._connect.send(self._get_package(cmd, payload))
+        try:
+            if self._connect is None:
+                _LOGGER.warning('Connection is None, cannot send')
+                return
+
+            self._connect.send(self._get_package(cmd, payload))
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            _LOGGER.warning(f'Connection error during send: {e}')
+            self._close_connection()
+            self._reconnect()
+        except Exception as e:
+            _LOGGER.error(f'Unexpected error in _only_send: {e}')
     
     def control(self, payload: dict) -> bool:
         """
