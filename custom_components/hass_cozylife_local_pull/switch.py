@@ -1,23 +1,19 @@
-"""Platform for sensor integration."""
+"""Platform for switch integration."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from typing import Any, Final, Literal, TypedDict, final
+from typing import Any
 from .const import (
     DOMAIN,
     SWITCH_TYPE_CODE,
-    LIGHT_TYPE_CODE,
-    LIGHT_DPID,
-    SWITCH,
-    WORK_MODE,
-    TEMP,
-    BRIGHT,
-    HUE,
-    SAT,
+    ENERGY_STORAGE_TYPE_CODE,
+    ENERGY_CONTROL,
+    ENERGY_BIT_AC,
+    ENERGY_BIT_LED,
+    ENERGY_BIT_DC,
 )
 import logging
 
@@ -47,6 +43,16 @@ def setup_platform(
         if SWITCH_TYPE_CODE == item.device_type_code:
             alias = device_aliases.get(item.ip)
             switchs.append(CozyLifeSwitch(item, alias))
+        elif ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
+            # Add energy storage switches
+            if item.ip in device_aliases:
+                base_name = device_aliases[item.ip]
+            else:
+                base_name = item.device_model_name + ' ' + item.device_id[-4:]
+
+            switchs.append(EnergyStorageACSwitch(item, base_name))
+            switchs.append(EnergyStorageLEDSwitch(item, base_name))
+            switchs.append(EnergyStorageDCSwitch(item, base_name))
 
     add_entities(switchs)
 
@@ -107,5 +113,85 @@ class CozyLifeSwitch(SwitchEntity):
         _LOGGER.info('turn_off')
         self._tcp_client.control({'1': 0})
         return None
-        
+
         raise NotImplementedError()
+
+
+# Energy Storage Switches
+
+class EnergyStorageBaseSwitch(SwitchEntity):
+    """Base class for energy storage switches."""
+
+    def __init__(self, tcp_client, base_name: str, bit_mask: int, switch_name: str) -> None:
+        """Initialize the switch."""
+        self._tcp_client = tcp_client
+        self._bit_mask = bit_mask
+        self._unique_id = f"{tcp_client.device_id}_{switch_name.lower().replace(' ', '_')}"
+        self._name = f"{base_name} {switch_name}"
+        self._attr_is_on = False
+        self._update_state()
+
+    def _get_control_value(self) -> int:
+        """Get current DPID 1 value."""
+        state = self._tcp_client.query()
+        return int(state.get(ENERGY_CONTROL, 0))
+
+    def _update_state(self):
+        """Update the switch state from device."""
+        control_value = self._get_control_value()
+        self._attr_is_on = (control_value & self._bit_mask) != 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def available(self) -> bool:
+        """Return if the device is available."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if entity is on."""
+        self._update_state()
+        return self._attr_is_on
+
+    @property
+    def unique_id(self) -> str | None:
+        """Return a unique ID."""
+        return self._unique_id
+
+    def turn_on(self, **kwargs: Any) -> None:
+        """Turn the entity on."""
+        current = self._get_control_value()
+        new_value = current | self._bit_mask
+        self._tcp_client.control({ENERGY_CONTROL: new_value})
+        self._attr_is_on = True
+
+    def turn_off(self, **kwargs: Any) -> None:
+        """Turn the entity off."""
+        current = self._get_control_value()
+        new_value = current & ~self._bit_mask
+        self._tcp_client.control({ENERGY_CONTROL: new_value})
+        self._attr_is_on = False
+
+
+class EnergyStorageACSwitch(EnergyStorageBaseSwitch):
+    """AC output switch for energy storage device."""
+
+    def __init__(self, tcp_client, base_name: str) -> None:
+        super().__init__(tcp_client, base_name, ENERGY_BIT_AC, "AC Output")
+
+
+class EnergyStorageLEDSwitch(EnergyStorageBaseSwitch):
+    """LED lamp switch for energy storage device."""
+
+    def __init__(self, tcp_client, base_name: str) -> None:
+        super().__init__(tcp_client, base_name, ENERGY_BIT_LED, "LED Lamp")
+
+
+class EnergyStorageDCSwitch(EnergyStorageBaseSwitch):
+    """DC 12V output switch for energy storage device."""
+
+    def __init__(self, tcp_client, base_name: str) -> None:
+        super().__init__(tcp_client, base_name, ENERGY_BIT_DC, "DC Output")
