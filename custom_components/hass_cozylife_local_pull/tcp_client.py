@@ -47,7 +47,12 @@ class tcp_client(object):
     def __init__(self, ip):
         self._ip = ip
         self._connect = None  # Initialize _connect as None
-        self._close_connection() 
+        self._device_type_code = None
+        self._device_model_name = None
+        self._device_id = None
+        self._pid = None
+        self._icon = None
+        self._close_connection()
         self._reconnect()
     
     def _close_connection(self):
@@ -100,7 +105,11 @@ class tcp_client(object):
     @property
     def device_type_code(self) -> str:
         return self._device_type_code
-    
+
+    @property
+    def ip(self):
+        return self._ip
+
     @property
     def device_id(self):
         return self._device_id
@@ -129,12 +138,17 @@ class tcp_client(object):
             return None
 
         self._device_id = resp_json['msg']['did']
-        
+
+        # Get device type code directly from device response (dtp field)
+        if resp_json['msg'].get('dtp') is not None:
+            self._device_type_code = resp_json['msg']['dtp']
+            _LOGGER.info(f'Device type code from device: {self._device_type_code}')
+
         if resp_json['msg'].get('pid') is None:
             _LOGGER.info('_device_info.recv.error3')
             return None
-        
-        self._pid = resp_json['msg']['pid']        
+
+        self._pid = resp_json['msg']['pid']
         pid_list = get_pid_list()
 
         for item in pid_list:
@@ -146,17 +160,30 @@ class tcp_client(object):
                     self._device_model_name = item1['n']
                     self._dpid = item1['dpid']
                     break
-            
+
             if match:
-                self._device_type_code = item['c']                
+                # Override device type code from API if found (more detailed info)
+                # But we already have it from device response above
+                if not self._device_type_code:
+                    self._device_type_code = item['c']
                 break
-        
+
+        # Set default model name if not found in API
+        if not self._device_model_name:
+            device_type_names = {
+                '00': 'Switch',
+                '01': 'Light',
+                '02': 'Energy Storage'
+            }
+            self._device_model_name = device_type_names.get(self._device_type_code, 'CozyLife Device')
+
         # _LOGGER.info(pid_list)
-        _LOGGER.info(self._device_id)
-        _LOGGER.info(self._device_type_code)
-        _LOGGER.info(self._pid)
-        _LOGGER.info(self._device_model_name)
-        _LOGGER.info(self._icon)
+        _LOGGER.info(f'Device ID: {self._device_id}')
+        _LOGGER.info(f'Device Type Code: {self._device_type_code}')
+        _LOGGER.info(f'PID: {self._pid}')
+        _LOGGER.info(f'Device Model Name: {self._device_model_name}')
+        if self._icon:
+            _LOGGER.info(f'Icon: {self._icon}')
     
     def _get_package(self, cmd: int, payload: dict) -> bytes:
         """
