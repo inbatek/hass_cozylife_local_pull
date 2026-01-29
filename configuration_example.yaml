@@ -1,0 +1,30 @@
+# CozyLife Integration Configuration Examples
+
+# Example 1: Device-based configuration with aliases (recommended)
+# Use scan_cozylife.py to discover devices and generate this config
+hass_cozylife_local_pull:
+  lang: en
+  devices:
+    - serial_number: 767941640050c2edda8b
+      alias: Living Room Light
+      ip: 192.168.1.101
+    - serial_number: 629168597cb94c4c1d8f
+      alias: Bedroom Switch
+      ip: 192.168.1.102
+    - serial_number: 73034068e4b063351fe0
+      alias: Garage Power Station
+      ip: 192.168.1.103
+
+# Example 2: Legacy IP list configuration (still supported)
+# hass_cozylife_local_pull:
+#   lang: en
+#   ip:
+#     - "192.168.1.101"
+#     - "192.168.1.102"
+#     - "192.168.1.103"
+
+# Example 3: UDP discovery only (not recommended - requires router support)
+# hass_cozylife_local_pull:
+#   lang: en
+
+# Supported languages: en, zh, es, pt, ja, ru, nl, ko, fr, de
