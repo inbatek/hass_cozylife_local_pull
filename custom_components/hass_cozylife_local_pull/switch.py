@@ -40,25 +40,31 @@ def setup_platform(
     if discovery_info is None:
         return
 
-
     switchs = []
+    device_aliases = hass.data[DOMAIN].get('device_aliases', {})
+
     for item in hass.data[DOMAIN]['tcp_client']:
         if SWITCH_TYPE_CODE == item.device_type_code:
-            switchs.append(CozyLifeSwitch(item))
-    
+            alias = device_aliases.get(item.ip)
+            switchs.append(CozyLifeSwitch(item, alias))
+
     add_entities(switchs)
 
 
 class CozyLifeSwitch(SwitchEntity):
     _tcp_client = None
     _attr_is_on = True
-    
-    def __init__(self, tcp_client) -> None:
+
+    def __init__(self, tcp_client, alias: str | None = None) -> None:
         """Initialize the sensor."""
         _LOGGER.info('__init__')
         self._tcp_client = tcp_client
         self._unique_id = tcp_client.device_id
-        self._name = tcp_client.device_model_name + ' ' + tcp_client.device_id[-4:]
+        # Use alias if provided, otherwise use model name + device ID
+        if alias:
+            self._name = alias
+        else:
+            self._name = tcp_client.device_model_name + ' ' + tcp_client.device_id[-4:]
         self._refresh_state()
     
     def _refresh_state(self):

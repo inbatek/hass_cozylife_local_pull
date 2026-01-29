@@ -47,9 +47,15 @@ def setup_platform(
         return
 
     entities = []
+    device_aliases = hass.data[DOMAIN].get('device_aliases', {})
+
     for item in hass.data[DOMAIN]['tcp_client']:
         if ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
-            base_name = item.device_model_name + ' ' + item.device_id[-4:]
+            # Use alias if configured, otherwise use model name + device ID
+            if item.ip in device_aliases:
+                base_name = device_aliases[item.ip]
+            else:
+                base_name = item.device_model_name + ' ' + item.device_id[-4:]
 
             # Add switches
             entities.append(EnergyStorageACSwitch(item, base_name))
