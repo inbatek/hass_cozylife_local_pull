@@ -10,6 +10,7 @@ import threading
 CMD_INFO = 0
 CMD_QUERY = 2
 CMD_SET = 3
+CMD_PUSH = 10  # Device-initiated push notification
 CMD_LIST = [CMD_INFO, CMD_QUERY, CMD_SET]
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,24 +46,45 @@ class tcp_client(object):
     _sn = str
     
     def __init__(self, ip):
-        self._ip = ip
-        self._connect = None  # Initialize _connect as None
-        self._device_type_code = None
-        self._device_model_name = None
-        self._device_id = None
-        self._pid = None
-        self._icon = None
-        self._reconnecting = False  # Flag to track reconnection state
-        self._close_connection()
-        self._reconnect()
+        try:
+            self._ip = ip
+            self._connect = None  # Initialize _connect as None
+            self._device_type_code = None
+            self._device_model_name = None
+            self._device_id = None
+            self._pid = None
+            self._icon = None
+            self._reconnecting = False  # Flag to track reconnection state
+            self._device_state = {}  # Shared state dictionary from device updates
+            self._state_lock = threading.Lock()  # Thread-safe access to state
+            self._listener_running = False
+            self._listener_thread = None
+            _LOGGER.info(f'Initializing tcp_client for {self._ip}')
+            self._close_connection()
+            self._reconnect()
+            _LOGGER.info(f'tcp_client __init__ complete for {self._ip}')
+        except Exception as e:
+            _LOGGER.error(f'Error in tcp_client __init__ for {self._ip}: {e}', exc_info=True)
     
     def _close_connection(self):
+        # Stop listener thread
+        if self._listener_running:
+            _LOGGER.info(f'Stopping listener for {self._ip}')
+            self._listener_running = False
+            # Give thread time to exit gracefully
+            if self._listener_thread and self._listener_thread.is_alive():
+                self._listener_thread.join(timeout=2)
+
+        # Close socket
         if self._connect:
             try:
                 self._connect.close()
             except Exception as e:
                 _LOGGER.error(f'Error while closing the connection: {e}')
             self._connect = None
+
+        # Reset reconnecting flag so reconnection can be attempted
+        self._reconnecting = False
         
     def _reconnect(self):
         # Don't start a new reconnection if already reconnecting
@@ -77,17 +99,24 @@ class tcp_client(object):
             while True:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(10)  # Increased timeout to 10 seconds
+                    s.settimeout(10)  # Timeout for connect and all operations
                     _LOGGER.info(f'Attempting to connect to {self._ip}:{self._port}')
                     s.connect((self._ip, self._port))
                     _LOGGER.info(f'Connected to {self._ip}:{self._port}, getting device info')
                     self._connect = s
+                    # Ensure timeout is set after connection
+                    self._connect.settimeout(10)
                     self._device_info()
                     _LOGGER.info(f'Successfully connected and retrieved device info for {self._ip}')
                     self._reconnecting = False
                     return
                 except Exception as e:
                     _LOGGER.warning(f'Connection to {self._ip}:{self._port} failed: {e}')
+                    if s:
+                        try:
+                            s.close()
+                        except:
+                            pass
                     time.sleep(10)  # Reduced from 60 to 10 seconds for faster recovery
 
         thread = threading.Thread(target=reconnect_thread)
@@ -210,6 +239,16 @@ class tcp_client(object):
         _LOGGER.info(f'Device Model Name: {self._device_model_name}')
         if self._icon:
             _LOGGER.info(f'Icon: {self._icon}')
+
+        # Start listener thread for continuous updates
+        self._start_listener()
+
+        # Send initial query to populate state
+        try:
+            _LOGGER.info(f'Sending initial query to {self._ip}')
+            self._connect.send(self._get_package(CMD_QUERY, {}))
+        except Exception as e:
+            _LOGGER.warning(f'Failed to send initial query to {self._ip}: {e}')
     
     def _get_package(self, cmd: int, payload: dict) -> bytes:
         """
@@ -320,16 +359,91 @@ class tcp_client(object):
     
     def control(self, payload: dict) -> bool:
         """
-        control use dpid
+        Control device using dpid.
+        Updates local state optimistically (will be confirmed by device response).
         :param payload:
         :return:
         """
+        # Send command
         self._only_send(CMD_SET, payload)
+
+        # Optimistically update local state
+        with self._state_lock:
+            self._device_state.update(payload)
+
         return True
     
     def query(self) -> dict:
         """
-        query device state
+        Query device state from cached values (no network call).
+        State is updated by the listener thread.
         :return:
         """
-        return self._send_receiver(CMD_QUERY, {})
+        with self._state_lock:
+            return self._device_state.copy()
+
+    def _start_listener(self):
+        """Start background thread to continuously read from socket"""
+        if self._listener_running:
+            _LOGGER.debug(f'Listener already running for {self._ip}')
+            return
+
+        def listener_thread():
+            self._listener_running = True
+            _LOGGER.info(f'Listener thread started for {self._ip}')
+            buffer = ""
+
+            while self._listener_running and self._connect:
+                try:
+                    # Read data from socket
+                    data = self._connect.recv(1024)
+                    if not data:
+                        _LOGGER.warning(f'Socket closed by {self._ip}')
+                        break
+
+                    buffer += data.decode('utf-8')
+
+                    # Process complete messages (terminated by \r\n)
+                    while '\r\n' in buffer:
+                        line, buffer = buffer.split('\r\n', 1)
+                        if line:
+                            self._process_message(line)
+
+                except socket.timeout:
+                    # Timeout is OK, just continue listening
+                    continue
+                except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                    _LOGGER.warning(f'Listener connection error for {self._ip}: {e}')
+                    break
+                except Exception as e:
+                    _LOGGER.error(f'Listener error for {self._ip}: {e}', exc_info=True)
+                    break
+
+            _LOGGER.info(f'Listener thread stopped for {self._ip}')
+            self._listener_running = False
+            self._close_connection()
+            self._reconnect()
+
+        self._listener_thread = threading.Thread(target=listener_thread)
+        self._listener_thread.daemon = True
+        self._listener_thread.start()
+
+    def _process_message(self, message: str):
+        """Process incoming message from device"""
+        try:
+            data = json.loads(message)
+            cmd = data.get('cmd')
+
+            # Handle both query responses (CMD 2) and push notifications (CMD 10)
+            if cmd in [CMD_QUERY, CMD_PUSH]:
+                if data.get('msg') and isinstance(data['msg'], dict):
+                    if data['msg'].get('data') and isinstance(data['msg']['data'], dict):
+                        # Update shared state
+                        with self._state_lock:
+                            self._device_state.update(data['msg']['data'])
+                        _LOGGER.debug(f'State updated for {self._ip}: {data["msg"]["data"]}')
+
+        except json.JSONDecodeError as e:
+            _LOGGER.warning(f'Invalid JSON from {self._ip}: {message[:100]}')
+        except Exception as e:
+            _LOGGER.error(f'Error processing message from {self._ip}: {e}')

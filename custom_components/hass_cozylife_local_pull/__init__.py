@@ -63,9 +63,11 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
         'device_aliases': device_aliases,
     }
 
-    #wait for get device info from tcp conncetion
-    #but it is bad
-    time.sleep(3)
+    #wait for get device info from tcp connection
+    #increased from 3 to 15 seconds to allow slower devices to connect
+    _LOGGER.info(f'Waiting 15 seconds for {len(ip_list)} device(s) to connect...')
+    time.sleep(15)
+    _LOGGER.info('Connection wait complete, loading platforms')
     # _LOGGER.info('setup', hass, config)
     hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'light', DOMAIN, {}, config))
     hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'switch', DOMAIN, {}, config))
