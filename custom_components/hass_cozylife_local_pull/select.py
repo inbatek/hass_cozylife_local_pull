@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.entity import DeviceInfo
 import logging
 
@@ -23,33 +23,26 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the select platform."""
-    _LOGGER.info('Select setup_platform')
+    """Set up select entities from a config entry."""
 
-    if discovery_info is None:
-        return
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    client = entry_data["client"]
+    alias = entry_data.get("alias")
 
-    selects = []
-    device_aliases = hass.data[DOMAIN].get('device_aliases', {})
+    entities = []
 
-    for item in hass.data[DOMAIN]['tcp_client']:
-        if ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
-            # Use alias from config if available, otherwise use device model name from CozyLife app
-            if item.ip in device_aliases:
-                base_name = device_aliases[item.ip]
-            else:
-                base_name = item.device_model_name
+    if client.device_type_code == ENERGY_STORAGE_TYPE_CODE:
+        # Energy storage LED mode select
+        base_name = alias if alias else client.device_model_name
+        entities.append(EnergyStorageLEDModeSelect(client, base_name))
 
-            # Add LED mode select
-            selects.append(EnergyStorageLEDModeSelect(item, base_name))
-
-    add_entities(selects)
+    if entities:
+        async_add_entities(entities)
 
 
 class EnergyStorageLEDModeSelect(SelectEntity):

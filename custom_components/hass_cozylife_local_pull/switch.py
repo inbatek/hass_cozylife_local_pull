@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.entity import DeviceInfo
 from typing import Any
 from .const import (
@@ -19,44 +19,35 @@ from .const import (
 import logging
 
 _LOGGER = logging.getLogger(__name__)
-_LOGGER.info('switch')
 
 
-def setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the sensor platform."""
-    # We only want this platform to be set up via discovery.
-    # logging.info('setup_platform', hass, config, add_entities, discovery_info)
-    _LOGGER.info('setup_platform')
-    _LOGGER.info(f'ip={hass.data[DOMAIN]}')
-    
-    if discovery_info is None:
-        return
+    """Set up switches from a config entry."""
 
-    switchs = []
-    device_aliases = hass.data[DOMAIN].get('device_aliases', {})
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    client = entry_data["client"]
+    alias = entry_data.get("alias")
 
-    for item in hass.data[DOMAIN]['tcp_client']:
-        if SWITCH_TYPE_CODE == item.device_type_code:
-            alias = device_aliases.get(item.ip)
-            switchs.append(CozyLifeSwitch(item, alias))
-        elif ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
-            # Add energy storage switches
-            # Use alias from config if available, otherwise use device model name from CozyLife app
-            if item.ip in device_aliases:
-                base_name = device_aliases[item.ip]
-            else:
-                base_name = item.device_model_name
+    entities = []
 
-            switchs.append(EnergyStorageACSwitch(item, base_name))
-            switchs.append(EnergyStorageLEDSwitch(item, base_name))
-            switchs.append(EnergyStorageDCSwitch(item, base_name))
+    if client.device_type_code == SWITCH_TYPE_CODE:
+        # Regular switch/plug
+        device_name = alias if alias else client.device_model_name
+        entities.append(CozyLifeSwitch(client, device_name))
 
-    add_entities(switchs)
+    elif client.device_type_code == ENERGY_STORAGE_TYPE_CODE:
+        # Energy storage switches
+        base_name = alias if alias else client.device_model_name
+        entities.append(EnergyStorageACSwitch(client, base_name))
+        entities.append(EnergyStorageLEDSwitch(client, base_name))
+        entities.append(EnergyStorageDCSwitch(client, base_name))
+
+    if entities:
+        async_add_entities(entities)
 
 
 class CozyLifeSwitch(SwitchEntity):

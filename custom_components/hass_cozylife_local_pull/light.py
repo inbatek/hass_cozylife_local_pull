@@ -15,37 +15,35 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, LIGHT_TYPE_CODE
-from .tcp_client import tcp_client
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up the CozyLife light platform."""
-    if discovery_info is None:
-        return
+    """Set up lights from a config entry."""
 
-    lights = []
-    device_aliases = hass.data[DOMAIN].get('device_aliases', {})
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    client = entry_data["client"]
+    alias = entry_data.get("alias")
 
-    if DOMAIN in hass.data and 'tcp_client' in hass.data[DOMAIN]:
-        for item in hass.data[DOMAIN]['tcp_client']:
-            if LIGHT_TYPE_CODE == item.device_type_code:
-                alias = device_aliases.get(item.ip)
-                lights.append(CozyLifeLightOptimized(item, alias))
+    entities = []
 
-    if lights:
-        async_add_entities(lights)
+    if client.device_type_code == LIGHT_TYPE_CODE:
+        # Regular light device
+        device_name = alias if alias else client.device_model_name
+        entities.append(CozyLifeLightOptimized(client, device_name))
+
+    if entities:
+        async_add_entities(entities)
 
 class CozyLifeLightOptimized(LightEntity):
     """Optimized representation of a CozyLife Light for high-frequency control."""
@@ -55,15 +53,12 @@ class CozyLifeLightOptimized(LightEntity):
     _attr_min_color_temp_kelvin = 2000
     _attr_max_color_temp_kelvin = 6500
 
-    def __init__(self, tcp_client_instance: tcp_client, alias: str | None = None) -> None:
+    def __init__(self, tcp_client_instance, base_name: str) -> None:
         """Initialize the light."""
         self._tcp_client = tcp_client_instance
+        self._base_name = base_name  # Store base name for device_info
         self._attr_unique_id = f"{self._tcp_client.device_id}_light"  # Add suffix to avoid conflicts
-        # Use alias from config if provided, otherwise use device model name from CozyLife app
-        if alias:
-            self._attr_name = alias
-        else:
-            self._attr_name = self._tcp_client.device_model_name
+        self._attr_name = base_name
         self._attr_supported_color_modes = set()
         dpid = self._tcp_client.dpid
 
@@ -89,7 +84,7 @@ class CozyLifeLightOptimized(LightEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self._tcp_client.device_id)},
-            "name": self._attr_name,
+            "name": self._base_name,  # Use stored base name
             "manufacturer": "CozyLife",
             "model": self._tcp_client.device_model_name,
         }
