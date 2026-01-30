@@ -67,7 +67,7 @@ class CozyLifeSwitch(SwitchEntity):
         """Initialize the sensor."""
         _LOGGER.info('__init__')
         self._tcp_client = tcp_client
-        self._unique_id = tcp_client.device_id
+        self._unique_id = f"{tcp_client.device_id}_switch"  # Add suffix to avoid conflicts
         # Use alias from config if provided, otherwise use device model name from CozyLife app
         if alias:
             self._name = alias

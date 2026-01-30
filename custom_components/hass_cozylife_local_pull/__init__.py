@@ -4,6 +4,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import device_registry as dr
 import logging
 import time
 from .const import (
@@ -67,7 +68,28 @@ def setup(hass: HomeAssistant, config: ConfigType) -> bool:
     #increased from 3 to 15 seconds to allow slower devices to connect
     _LOGGER.info(f'Waiting 15 seconds for {len(ip_list)} device(s) to connect...')
     time.sleep(15)
-    _LOGGER.info('Connection wait complete, loading platforms')
+    _LOGGER.info('Connection wait complete, registering devices')
+
+    # Register devices in device registry (needed for YAML-based integrations)
+    device_reg = dr.async_get(hass)
+    for client in hass.data[DOMAIN]['tcp_client']:
+        if client.device_id:
+            # Determine device name (alias or model name)
+            if client.ip in device_aliases:
+                device_name = device_aliases[client.ip]
+            else:
+                device_name = client.device_model_name
+
+            _LOGGER.info(f'Registering device: {device_name} ({client.device_id})')
+            device_reg.async_get_or_create(
+                config_entry_id=None,  # YAML-based, no config entry
+                identifiers={(DOMAIN, client.device_id)},
+                name=device_name,
+                manufacturer="CozyLife",
+                model=client.device_model_name,
+            )
+
+    _LOGGER.info('Devices registered, loading platforms')
     # _LOGGER.info('setup', hass, config)
     hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'light', DOMAIN, {}, config))
     hass.loop.call_soon_threadsafe(hass.async_create_task, async_load_platform(hass, 'switch', DOMAIN, {}, config))
