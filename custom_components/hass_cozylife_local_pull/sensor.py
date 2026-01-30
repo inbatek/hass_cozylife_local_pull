@@ -137,4 +137,4 @@ class EnergyStorageCapacitySensor(EnergyStorageBaseSensor):
         super().__init__(tcp_client, base_name, "Battery Capacity", ENERGY_CAPACITY)
         self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = SensorStateClass.TOTAL  # Total capacity, not measurement

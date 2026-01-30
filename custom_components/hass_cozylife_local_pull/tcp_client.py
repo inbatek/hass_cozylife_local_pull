@@ -52,6 +52,7 @@ class tcp_client(object):
         self._device_id = None
         self._pid = None
         self._icon = None
+        self._reconnecting = False  # Flag to track reconnection state
         self._close_connection()
         self._reconnect()
     
@@ -64,18 +65,30 @@ class tcp_client(object):
             self._connect = None
         
     def _reconnect(self):
-        def reconnect_thread():            
+        # Don't start a new reconnection if already reconnecting
+        if self._reconnecting:
+            _LOGGER.debug(f'Already reconnecting to {self._ip}, skipping')
+            return
+
+        def reconnect_thread():
+            self._reconnecting = True
+            _LOGGER.info(f'Starting connection to {self._ip}:{self._port}')
+
             while True:
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(3)
+                    s.settimeout(10)  # Increased timeout to 10 seconds
+                    _LOGGER.info(f'Attempting to connect to {self._ip}:{self._port}')
                     s.connect((self._ip, self._port))
+                    _LOGGER.info(f'Connected to {self._ip}:{self._port}, getting device info')
                     self._connect = s
                     self._device_info()
+                    _LOGGER.info(f'Successfully connected and retrieved device info for {self._ip}')
+                    self._reconnecting = False
                     return
                 except Exception as e:
-                    _LOGGER.info(f'Reconnection failed: {e}')
-                    time.sleep(60)  # Wait for 60 seconds before trying to reconnect
+                    _LOGGER.warning(f'Connection to {self._ip}:{self._port} failed: {e}')
+                    time.sleep(10)  # Reduced from 60 to 10 seconds for faster recovery
 
         thread = threading.Thread(target=reconnect_thread)
         thread.daemon = True  # This makes the thread exit when the main program exits
@@ -123,6 +136,9 @@ class tcp_client(object):
             if self._connect is None:
                 _LOGGER.warning('Connection is None in _device_info')
                 return None
+
+            # Set timeout for recv operations
+            self._connect.settimeout(10)
 
             # Send CMD_INFO
             self._connect.send(self._get_package(CMD_INFO, {}))
@@ -245,7 +261,8 @@ class tcp_client(object):
         """
         try:
             if self._connect is None:
-                _LOGGER.warning('Connection is None, cannot send')
+                if not self._reconnecting:
+                    _LOGGER.debug(f'Connection to {self._ip} is None, not connected yet')
                 return {}
 
             self._connect.send(self._get_package(cmd, payload))
@@ -289,7 +306,8 @@ class tcp_client(object):
         """
         try:
             if self._connect is None:
-                _LOGGER.warning('Connection is None, cannot send')
+                if not self._reconnecting:
+                    _LOGGER.debug(f'Connection to {self._ip} is None, not connected yet')
                 return
 
             self._connect.send(self._get_package(cmd, payload))

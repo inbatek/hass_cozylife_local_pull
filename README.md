@@ -142,6 +142,19 @@ Energy devices use a bitmask for independent output control (DPID 1):
 
 Example: Value 7 (binary 111) = all outputs on
 
+## Compatibility
+
+**✅ Home Assistant 2025.5+ and 2026.1+ Compatible**
+
+This integration uses modern Home Assistant APIs and is fully compatible with:
+- Home Assistant Core 2025.5+ (async platform loading)
+- Home Assistant Core 2026.1+ (kelvin color temperature, ColorMode enums)
+
+The integration uses:
+- Kelvin-based color temperature (not deprecated mireds)
+- `ColorMode` enums (not deprecated string constants)
+- `async_load_platform` (not deprecated `load_platform`)
+
 ## Credits
 
 - Original integration by CozyLife Team
