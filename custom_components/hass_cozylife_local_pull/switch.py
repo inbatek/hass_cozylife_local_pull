@@ -104,12 +104,12 @@ class CozyLifeSwitch(SwitchEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._tcp_client.device_id)},
-            name=self._name,
-            manufacturer="CozyLife",
-            model=self._tcp_client.device_model_name,
-        )
+        return {
+            "identifiers": {(DOMAIN, self._tcp_client.device_id)},
+            "name": self._name,
+            "manufacturer": "CozyLife",
+            "model": self._tcp_client.device_model_name,
+        }
 
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
@@ -177,12 +177,12 @@ class EnergyStorageBaseSwitch(SwitchEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._tcp_client.device_id)},
-            name=self._base_name,  # Use stored base name
-            manufacturer="CozyLife",
-            model=self._tcp_client.device_model_name,
-        )
+        return {
+            "identifiers": {(DOMAIN, self._tcp_client.device_id)},
+            "name": self._base_name,  # Use stored base name
+            "manufacturer": "CozyLife",
+            "model": self._tcp_client.device_model_name,
+        }
 
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""

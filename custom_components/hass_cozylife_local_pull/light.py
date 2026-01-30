@@ -87,12 +87,12 @@ class CozyLifeLightOptimized(LightEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._tcp_client.device_id)},
-            name=self._attr_name,
-            manufacturer="CozyLife",
-            model=self._tcp_client.device_model_name,
-        )
+        return {
+            "identifiers": {(DOMAIN, self._tcp_client.device_id)},
+            "name": self._attr_name,
+            "manufacturer": "CozyLife",
+            "model": self._tcp_client.device_model_name,
+        }
 
     # async_update method is intentionally removed because polling is disabled
 
