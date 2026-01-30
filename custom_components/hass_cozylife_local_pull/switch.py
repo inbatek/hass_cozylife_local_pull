@@ -5,6 +5,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity import DeviceInfo
 from typing import Any
 from .const import (
     DOMAIN,
@@ -98,7 +99,17 @@ class CozyLifeSwitch(SwitchEntity):
     def unique_id(self) -> str | None:
         """Return a unique ID."""
         return self._unique_id
-    
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._tcp_client.device_id)},
+            name=self._name,
+            manufacturer="CozyLife",
+            model=self._tcp_client.device_model_name,
+        )
+
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
         self._attr_is_on = True
@@ -160,6 +171,16 @@ class EnergyStorageBaseSwitch(SwitchEntity):
     def unique_id(self) -> str | None:
         """Return a unique ID."""
         return self._unique_id
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._tcp_client.device_id)},
+            name=self._name.rsplit(' ', 1)[0] if ' ' in self._name else self._name,  # Remove switch name suffix
+            manufacturer="CozyLife",
+            model=self._tcp_client.device_model_name,
+        )
 
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""

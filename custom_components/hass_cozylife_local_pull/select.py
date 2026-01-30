@@ -5,6 +5,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity import DeviceInfo
 import logging
 
 from .const import (
@@ -101,6 +102,16 @@ class EnergyStorageLEDModeSelect(SelectEntity):
     def unique_id(self) -> str | None:
         """Return a unique ID."""
         return self._unique_id
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._tcp_client.device_id)},
+            name=self._name.rsplit(' ', 1)[0] if ' ' in self._name else self._name,  # Remove "LED Mode" suffix
+            manufacturer="CozyLife",
+            model=self._tcp_client.device_model_name,
+        )
 
     @property
     def current_option(self) -> str | None:

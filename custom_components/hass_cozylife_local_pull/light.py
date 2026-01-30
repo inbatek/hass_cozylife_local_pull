@@ -18,6 +18,7 @@ from homeassistant.components.light import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, LIGHT_TYPE_CODE
 from .tcp_client import tcp_client
@@ -82,6 +83,16 @@ class CozyLifeLightOptimized(LightEntity):
         self._attr_color_temp_kelvin = 3500
         self._attr_color_mode = ColorMode.COLOR_TEMP
         self._attr_available = True
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._tcp_client.device_id)},
+            name=self._attr_name,
+            manufacturer="CozyLife",
+            model=self._tcp_client.device_model_name,
+        )
 
     # async_update method is intentionally removed because polling is disabled
 
