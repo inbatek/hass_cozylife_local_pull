@@ -37,8 +37,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     devices_from_config = conf.get('devices', [])
     ip_list = conf.get('ip', [])
 
+    # Get existing config entries to avoid duplicates
+    existing_entries = hass.config_entries.async_entries(DOMAIN)
+    existing_ips = {entry.data.get("ip") for entry in existing_entries}
+    existing_serial_numbers = {entry.data.get("serial_number") for entry in existing_entries}
+
     # Handle new device list format
     for device in devices_from_config:
+        device_ip = device.get("ip")
+        device_serial = device.get("serial_number")
+
+        # Skip if already configured by IP or serial number
+        if device_ip in existing_ips:
+            _LOGGER.debug(f"Device {device_ip} already configured, skipping import")
+            continue
+        if device_serial and device_serial in existing_serial_numbers:
+            _LOGGER.debug(f"Device {device_serial} already configured, skipping import")
+            continue
+
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
@@ -49,6 +65,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     # Handle legacy IP list format
     for ip in ip_list:
+        # Skip if already configured
+        if ip in existing_ips:
+            _LOGGER.debug(f"Device {ip} already configured, skipping import")
+            continue
+
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
