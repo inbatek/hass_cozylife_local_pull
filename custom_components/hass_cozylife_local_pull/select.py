@@ -56,13 +56,14 @@ class EnergyStorageLEDModeSelect(SelectEntity):
 
     # Mode mapping: display name -> DPID 33 value
     MODE_MAP = {
+        "Off": None,  # Special case - turns off LED
         "Low": ENERGY_LED_MODE_LOW,
         "High": ENERGY_LED_MODE_HIGH,
         "SOS": ENERGY_LED_MODE_SOS,
     }
 
     # Reverse mapping: DPID 33 value -> display name
-    MODE_REVERSE_MAP = {v: k for k, v in MODE_MAP.items()}
+    MODE_REVERSE_MAP = {v: k for k, v in MODE_MAP.items() if v is not None}
 
     def __init__(self, tcp_client, base_name: str) -> None:
         """Initialize the select."""
@@ -70,7 +71,7 @@ class EnergyStorageLEDModeSelect(SelectEntity):
         self._unique_id = f"{tcp_client.device_id}_led_mode"
         self._name = f"{base_name} LED Mode"
         self._attr_options = list(self.MODE_MAP.keys())
-        self._attr_current_option = None
+        self._attr_current_option = "Off"  # Default to Off
 
     def _get_control_value(self) -> int:
         """Get current DPID 1 value."""
@@ -93,8 +94,8 @@ class EnergyStorageLEDModeSelect(SelectEntity):
 
     @property
     def available(self) -> bool:
-        """Return if the select is available (LED must be on)."""
-        return self._is_led_on()
+        """Return if the select is available (always available now)."""
+        return True
 
     @property
     def unique_id(self) -> str | None:
@@ -105,20 +106,33 @@ class EnergyStorageLEDModeSelect(SelectEntity):
     def current_option(self) -> str | None:
         """Return the currently selected option."""
         if not self._is_led_on():
-            return None
+            return "Off"
 
         mode_value = self._get_led_mode()
         return self.MODE_REVERSE_MAP.get(mode_value, "Low")
 
     def select_option(self, option: str) -> None:
         """Change the selected option."""
-        if not self._is_led_on():
-            _LOGGER.warning("Cannot set LED mode when LED is off")
-            return
-
         if option not in self.MODE_MAP:
             _LOGGER.error(f"Invalid LED mode: {option}")
             return
 
-        mode_value = self.MODE_MAP[option]
-        self._tcp_client.control({ENERGY_LED_MODE: mode_value})
+        if option == "Off":
+            # Turn off LED by clearing bit 1 in DPID 1
+            current = self._get_control_value()
+            new_value = current & ~ENERGY_BIT_LED  # Clear LED bit
+            self._tcp_client.control({ENERGY_CONTROL: new_value})
+            _LOGGER.info(f"Turning LED off for {self._tcp_client.device_id}")
+        else:
+            # Turn on LED (if not already on) and set mode
+            current = self._get_control_value()
+            if not (current & ENERGY_BIT_LED):
+                # LED is off, turn it on
+                new_value = current | ENERGY_BIT_LED  # Set LED bit
+                self._tcp_client.control({ENERGY_CONTROL: new_value})
+                _LOGGER.info(f"Turning LED on for {self._tcp_client.device_id}")
+
+            # Set the LED mode
+            mode_value = self.MODE_MAP[option]
+            self._tcp_client.control({ENERGY_LED_MODE: mode_value})
+            _LOGGER.info(f"Setting LED mode to {option} ({mode_value}) for {self._tcp_client.device_id}")

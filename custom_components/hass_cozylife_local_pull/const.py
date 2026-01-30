@@ -34,8 +34,8 @@ ENERGY_BIT_LED = 2  # Bit 1: LED lamp
 ENERGY_BIT_DC = 4  # Bit 2: DC 12V output
 
 # LED Mode values for DPID 33
-ENERGY_LED_MODE_LOW = 0  # Steady less bright
-ENERGY_LED_MODE_HIGH = 1  # Steady full bright
+ENERGY_LED_MODE_LOW = 1  # Steady less bright (app shows as "Low")
+ENERGY_LED_MODE_HIGH = 0  # Steady full bright (app shows as "High")
 ENERGY_LED_MODE_SOS = 5  # SOS blinking pattern
 ENERGY_LED_MODE_AUTO = 8  # Auto/standby (when LED is off)
 
