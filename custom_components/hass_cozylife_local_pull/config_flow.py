@@ -35,18 +35,25 @@ class CozyLifeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not ip:
                 errors["ip"] = "ip_required"
             else:
-                # Create a unique ID based on IP for now (will be updated to device_id later)
-                await self.async_set_unique_id(f"cozylife_{ip}")
-                self._abort_if_unique_id_configured()
+                # Check if there's already an entry for this IP
+                for entry in self._async_current_entries():
+                    if entry.data.get("ip") == ip:
+                        errors["ip"] = "already_configured"
+                        break
 
-                # Create config entry
-                return self.async_create_entry(
-                    title=alias if alias else ip,
-                    data={
-                        "ip": ip,
-                        "alias": alias,
-                    },
-                )
+                if not errors:
+                    # Create a unique ID based on IP for now (will be updated to device_id later)
+                    await self.async_set_unique_id(f"cozylife_{ip}")
+                    self._abort_if_unique_id_configured()
+
+                    # Create config entry
+                    return self.async_create_entry(
+                        title=alias if alias else ip,
+                        data={
+                            "ip": ip,
+                            "alias": alias,
+                        },
+                    )
 
         # Show form
         data_schema = vol.Schema(
@@ -72,6 +79,22 @@ class CozyLifeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ip = import_data["ip"]
             alias = import_data.get("alias", ip)
 
+            # Check if there's already an entry for this IP (with any unique_id)
+            for entry in self._async_current_entries():
+                if entry.data.get("ip") == ip:
+                    _LOGGER.info(f"Updating existing entry for {ip} with device_id {device_id}")
+                    # Update existing entry with new unique_id and data
+                    self.hass.config_entries.async_update_entry(
+                        entry,
+                        unique_id=device_id,
+                        data={
+                            "ip": ip,
+                            "alias": alias,
+                            "serial_number": device_id,
+                        },
+                    )
+                    return self.async_abort(reason="already_configured")
+
             # Set unique ID to device serial number
             await self.async_set_unique_id(device_id)
             self._abort_if_unique_id_configured()
@@ -88,6 +111,12 @@ class CozyLifeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # For legacy IP list format
         elif "ip" in import_data:
             ip = import_data["ip"]
+
+            # Check if there's already an entry for this IP
+            for entry in self._async_current_entries():
+                if entry.data.get("ip") == ip:
+                    _LOGGER.info(f"Entry for {ip} already exists, skipping import")
+                    return self.async_abort(reason="already_configured")
 
             # Use IP as unique ID for legacy format
             await self.async_set_unique_id(f"cozylife_{ip}")

@@ -11,7 +11,8 @@
       }
     },
     "error": {
-      "ip_required": "IP address is required"
+      "ip_required": "IP address is required",
+      "already_configured": "A device with this IP address is already configured"
     },
     "abort": {
       "already_configured": "This device is already configured",
