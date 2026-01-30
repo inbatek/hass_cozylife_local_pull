@@ -40,11 +40,11 @@ def setup_platform(
 
     for item in hass.data[DOMAIN]['tcp_client']:
         if ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
-            # Use alias if configured, otherwise use model name + device ID
+            # Use alias from config if available, otherwise use device model name from CozyLife app
             if item.ip in device_aliases:
                 base_name = device_aliases[item.ip]
             else:
-                base_name = item.device_model_name + ' ' + item.device_id[-4:]
+                base_name = item.device_model_name
 
             # Add LED mode select
             selects.append(EnergyStorageLEDModeSelect(item, base_name))
@@ -69,6 +69,7 @@ class EnergyStorageLEDModeSelect(SelectEntity):
     def __init__(self, tcp_client, base_name: str) -> None:
         """Initialize the select."""
         self._tcp_client = tcp_client
+        self._base_name = base_name  # Store base name for device_info
         self._unique_id = f"{tcp_client.device_id}_led_mode"
         self._name = f"{base_name} LED Mode"
         self._attr_options = list(self.MODE_MAP.keys())
@@ -108,7 +109,7 @@ class EnergyStorageLEDModeSelect(SelectEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._tcp_client.device_id)},
-            name=self._name.rsplit(' ', 1)[0] if ' ' in self._name else self._name,  # Remove "LED Mode" suffix
+            name=self._base_name,  # Use stored base name
             manufacturer="CozyLife",
             model=self._tcp_client.device_model_name,
         )

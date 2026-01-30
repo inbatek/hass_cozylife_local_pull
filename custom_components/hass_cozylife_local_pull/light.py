@@ -59,11 +59,11 @@ class CozyLifeLightOptimized(LightEntity):
         """Initialize the light."""
         self._tcp_client = tcp_client_instance
         self._attr_unique_id = self._tcp_client.device_id
-        # Use alias if provided, otherwise use model name + device ID
+        # Use alias from config if provided, otherwise use device model name from CozyLife app
         if alias:
             self._attr_name = alias
         else:
-            self._attr_name = f"{self._tcp_client.device_model_name} {self._tcp_client.device_id[-4:]}"
+            self._attr_name = self._tcp_client.device_model_name
         self._attr_supported_color_modes = set()
         dpid = self._tcp_client.dpid
 

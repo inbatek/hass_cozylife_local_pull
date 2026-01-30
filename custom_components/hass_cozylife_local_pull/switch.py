@@ -46,10 +46,11 @@ def setup_platform(
             switchs.append(CozyLifeSwitch(item, alias))
         elif ENERGY_STORAGE_TYPE_CODE == item.device_type_code:
             # Add energy storage switches
+            # Use alias from config if available, otherwise use device model name from CozyLife app
             if item.ip in device_aliases:
                 base_name = device_aliases[item.ip]
             else:
-                base_name = item.device_model_name + ' ' + item.device_id[-4:]
+                base_name = item.device_model_name
 
             switchs.append(EnergyStorageACSwitch(item, base_name))
             switchs.append(EnergyStorageLEDSwitch(item, base_name))
@@ -67,11 +68,11 @@ class CozyLifeSwitch(SwitchEntity):
         _LOGGER.info('__init__')
         self._tcp_client = tcp_client
         self._unique_id = tcp_client.device_id
-        # Use alias if provided, otherwise use model name + device ID
+        # Use alias from config if provided, otherwise use device model name from CozyLife app
         if alias:
             self._name = alias
         else:
-            self._name = tcp_client.device_model_name + ' ' + tcp_client.device_id[-4:]
+            self._name = tcp_client.device_model_name
         self._refresh_state()
     
     def _refresh_state(self):
@@ -137,6 +138,7 @@ class EnergyStorageBaseSwitch(SwitchEntity):
         """Initialize the switch."""
         self._tcp_client = tcp_client
         self._bit_mask = bit_mask
+        self._base_name = base_name  # Store base name for device_info
         self._unique_id = f"{tcp_client.device_id}_{switch_name.lower().replace(' ', '_')}"
         self._name = f"{base_name} {switch_name}"
         self._attr_is_on = False
@@ -177,7 +179,7 @@ class EnergyStorageBaseSwitch(SwitchEntity):
         """Return device information."""
         return DeviceInfo(
             identifiers={(DOMAIN, self._tcp_client.device_id)},
-            name=self._name.rsplit(' ', 1)[0] if ' ' in self._name else self._name,  # Remove switch name suffix
+            name=self._base_name,  # Use stored base name
             manufacturer="CozyLife",
             model=self._tcp_client.device_model_name,
         )
