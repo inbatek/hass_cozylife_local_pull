@@ -100,6 +100,11 @@ class tcp_client(object):
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(10)  # Timeout for connect and all operations
+                    # Enable TCP keepalive to detect dead connections
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
+                    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
                     _LOGGER.info(f'Attempting to connect to {self._ip}:{self._port}')
                     s.connect((self._ip, self._port))
                     _LOGGER.info(f'Connected to {self._ip}:{self._port}, getting device info')
@@ -204,7 +209,13 @@ class tcp_client(object):
             return None
 
         self._pid = resp_json['msg']['pid']
-        pid_list = get_pid_list()
+
+        # API lookup is non-fatal — device works fully without it
+        try:
+            pid_list = get_pid_list()
+        except Exception as e:
+            _LOGGER.warning(f'Failed to fetch PID list from API: {e}')
+            pid_list = []
 
         for item in pid_list:
             match = False
@@ -392,6 +403,8 @@ class tcp_client(object):
             self._listener_running = True
             _LOGGER.info(f'Listener thread started for {self._ip}')
             buffer = ""
+            last_data_time = time.time()
+            HEARTBEAT_INTERVAL = 60  # Send heartbeat if no data for 60s
 
             while self._listener_running and self._connect:
                 try:
@@ -401,6 +414,7 @@ class tcp_client(object):
                         _LOGGER.warning(f'Socket closed by {self._ip}')
                         break
 
+                    last_data_time = time.time()
                     buffer += data.decode('utf-8')
 
                     # Process complete messages (terminated by \r\n)
@@ -410,7 +424,15 @@ class tcp_client(object):
                             self._process_message(line)
 
                 except socket.timeout:
-                    # Timeout is OK, just continue listening
+                    # No data received within timeout — send heartbeat if idle too long
+                    if time.time() - last_data_time > HEARTBEAT_INTERVAL:
+                        try:
+                            _LOGGER.debug(f'Sending heartbeat query to {self._ip}')
+                            self._connect.send(self._get_package(CMD_QUERY, {}))
+                            last_data_time = time.time()
+                        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                            _LOGGER.warning(f'Heartbeat failed for {self._ip}: {e}')
+                            break
                     continue
                 except (BrokenPipeError, ConnectionResetError, OSError) as e:
                     _LOGGER.warning(f'Listener connection error for {self._ip}: {e}')
